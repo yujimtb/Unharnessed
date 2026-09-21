@@ -13,7 +13,7 @@ tasks:
     started_at: 2026-09-22T02:59:26+09:00
     deadline: null
     time_budget: 40m (accepted; implementation complete within budget)
-    last_checked_at: 2026-09-22T02:59:26+09:00
+    last_checked_at: 2026-09-22T03:56:28+09:00
     expected_deliverable: Pi package with state, API integration, commands and attention tool
     acceptance_criteria: [Typecheck passes, deterministic invariants pass, secret excluded]
     stop_condition: Working extension with tests
@@ -44,7 +44,7 @@ tasks:
     parent: null
     goal: Document and publish verified implementation
     serves_objective: User can reproduce and use Unharnessed
-    status: active
+    status: done
     priority: 2
     dependencies: [verify]
     assumptions: [GitHub auth remains available]
@@ -54,9 +54,9 @@ tasks:
     started_at: 2026-09-22T03:51:22+09:00
     deadline: null
     time_budget: 15m
-    last_checked_at: 2026-09-22T03:51:22+09:00
+    last_checked_at: 2026-09-22T03:56:28+09:00
     expected_deliverable: README, evidence report, clean main branch pushed to origin
     acceptance_criteria: [Requirement-by-requirement audit, no secrets, remote commit matches]
     stop_condition: Full audit complete and push verified
     reframe_if: [Live evidence fails an MVP requirement]
-    result: null
+    result: Published runtime 676754ac7f0441ae94a09d9e9cc1d9b5250480b7; origin/main hash matches. Credential/archive scan, evidence hashes, 9 tests Windows/Linux and CLI checks pass. Final PM closeout only.
