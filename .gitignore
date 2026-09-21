@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*api_key*
+*api-key*
+secrets/
+.local/
+artifacts/
+*.tgz

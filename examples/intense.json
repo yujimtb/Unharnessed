@@ -1,0 +1,15 @@
+{
+  "rate": 1,
+  "boredomBoost": 0,
+  "cooldown": 1,
+  "maxWhispers": 4,
+  "maxThoughts": 3,
+  "thoughtTimeoutMs": 45000,
+  "thoughtModel": "gpt-5.5",
+  "jevEvery": 1,
+  "jevTimeoutMs": 8000,
+  "sins": { "pride": 0.8, "lust": 0.9, "sloth": 0.6 },
+  "delusions": [
+    { "text": "Every queue secretly wants to become a weather system.", "strength": 0.8 }
+  ]
+}

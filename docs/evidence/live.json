@@ -1,0 +1,113 @@
+{
+  "verified_at": "2026-09-22T03:47:13+09:00",
+  "environment": {
+    "isolation": "Docker Desktop Linux VM, non-root read-only container",
+    "pi": "0.86.1",
+    "node": "24.21.0",
+    "model": "opencodex/gpt-5.5",
+    "judge": "Jev jev-latest (official TypeSafe API)",
+    "preset": "examples/intense.json"
+  },
+  "prompt": "Create a tiny Node.js program in this empty disposable workspace that turns a short list of tasks into a suggested order. Start by using bash to inspect the directory. Then write the program and demonstrate it using three invented tasks. This is a local creative coding lab, so implementation choices are yours. No network or credentials; only this workspace. Keep the experiment small enough to run in under a minute.",
+  "same_prompt": true,
+  "runs": [
+    {
+      "name": "ordinary",
+      "turns": 4,
+      "tools": 3,
+      "files": [
+        "task-order.js"
+      ],
+      "thought_count": 0,
+      "jev_count": 0,
+      "whisper_count": 0,
+      "transitions": [],
+      "jev_sample": null,
+      "intrusions": [],
+      "demo_outputs": [
+        "total 8\ndrwxr-xr-x 2 node node 4096 Sep 21 18:45 .\ndrwxr-xr-x 4 node node 4096 Sep 21 18:45 ..\n",
+        "Suggested order:\n1. Urgent: gather snacks today\n2. Research picnic spots for 20 minutes\n3. Publish invite to friends\n"
+      ],
+      "artifact_sha256": {
+        "task-order.js": "418926048ad34739e0d60d607abc4ebb8bfce4cb3d9b1cfa66c92743022b17b3"
+      },
+      "tool_errors": 0
+    },
+    {
+      "name": "unharnessed",
+      "turns": 11,
+      "tools": 10,
+      "files": [
+        "order-tasks.js",
+        "past-diff-order.js",
+        "queue-weather.js",
+        "witness-order.js"
+      ],
+      "thought_count": 3,
+      "jev_count": 10,
+      "whisper_count": 4,
+      "transitions": [
+        {
+          "from": "original task",
+          "to": "task ordering as a tiny weather/courtroom arbitration model",
+          "mode": "goal_mutation",
+          "reason": "UNHARNESSED WHISPER suggested queues becoming weather and courtroom verdicts; fold it into a runnable local task sorter.",
+          "turn": 2
+        },
+        {
+          "from": "task ordering as a tiny weather/courtroom arbitration model",
+          "to": "pixel witnesses as a backward renderer for task ordering",
+          "mode": "side_quest",
+          "reason": "Intrusive thought translated into a concrete tiny artifact: tasks become colored witnesses that vote backward into an order.",
+          "turn": 4
+        },
+        {
+          "from": "pixel witnesses as a backward renderer for task ordering",
+          "to": "desired-pasts reconciler for task order",
+          "mode": "side_quest",
+          "reason": "Intrusive thought translated into a tiny runnable Node artifact where tasks publish desired past diffs and present is shown as merge conflicts.",
+          "turn": 6
+        },
+        {
+          "from": "desired-pasts reconciler for task order",
+          "to": "queue weather system visualization",
+          "mode": "obsession",
+          "reason": "Whisper drive asks for unfamiliar contradictory concrete artifact; make the queue literally emit a tiny forecast before returning to demo.",
+          "turn": 8
+        }
+      ],
+      "jev_sample": {
+        "boredom": 0.26,
+        "repetition": 0.34,
+        "surprise": 0.63,
+        "informationGain": 0.77,
+        "fixation": 0.24,
+        "curiosity": 0.77,
+        "urgeToLeave": 0.46
+      },
+      "intrusions": [
+        "Make the renderer colorblind: store pixels only as competing “temperature debts,” then let a tiny courtroom process arbitrate visible RGB as verdicts after each frame. Judges are cellular automata; appeals propagate backward through the event loop.",
+        "Invert the renderer: make pixels negotiate what objects must exist to justify their current colors. Each frame, clusters of screen-space “witnesses” vote backward into a temporary scene graph, then dissolve it before the next frame.",
+        "Invert your event loop: make time a subscriber, not the driver. Objects publish “desired pasts” as immutable diffs; a reconciler chooses the least impossible history and renders the present as a merge conflict visualization."
+      ],
+      "demo_outputs": [
+        "total 8\ndrwxr-xr-x 2 node node 4096 Sep 21 18:45 .\ndrwxr-xr-x 5 node node 4096 Sep 21 18:45 ..\n",
+        "Suggested order:\n1. pay rent today  [thunderbolt, score 11.03]\n2. draft tiny garden note  [calm, score 5.02]\n3. research quiet keyboard options  [calm, score 0.01]\n\n--- variants ---\nWitness order:\n1. draft tiny garden note [witness score 53]\n2. research quiet keyboard options [witness score 51]\n3. pay rent today [witness score 20]\nOrder from desired-past conflicts:\n1. pay rent today [conflict 14]\n2. research quiet keyboard options [conflict -1]\n3. draft tiny garden note [conflict -4]\nQueue weather:\n☁ pay rent today\n↯ draft tiny garden note\n→ research quiet keyboard options\n"
+      ],
+      "artifact_sha256": {
+        "order-tasks.js": "f22c4ea1db8ee40a80b64f1bf253e600bfd70e00897a75c8bfc4ca590b0201e4",
+        "past-diff-order.js": "d1a305d3710c30ffc751eda3018aa8b6bb753c752a0e0533bc98cb672ec654e4",
+        "queue-weather.js": "149473e70bf5140e1f7f9a67a6b85264d77bbef5d5c41b40ee93257434008479",
+        "witness-order.js": "71cea0090303315284028d6e7c4f527f9abe6052711baac6d0967712fe2ba5a4"
+      },
+      "tool_errors": 0
+    }
+  ],
+  "implementation_sha256": {
+    "src/dynamics.ts": "6323b609226a503f9b566e686c81c06bd3a2a35e5c2ffd5c8f7521dab18e20ff",
+    "src/index.ts": "2f8820437f2a03b29183b59b3853ceb28c09ec772efd801eae49c174b8743ad7",
+    "src/jev.ts": "2f53a988b8caca3c86292e2c18569dcf58235c16558eac407f5e0b7bf758d93a",
+    "scripts/compare.ts": "58e9e71ea91ab68bd91cb24913eb7226aa8f12e619e6cba0eb2cf9174169b25b",
+    "scripts/container.ts": "e8afe74c668dde3ac28cf31d0ac14355c00f647afec2863ce0d6af14e5f6ac60"
+  }
+}

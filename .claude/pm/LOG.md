@@ -1,0 +1,8 @@
+# Project log
+
+[2026-09-22T02:57:52+09:00] Session started in D:/userdata/docs/projects/Unharnessed; no local commits, only idea.md and private Jev credential file.
+[2026-09-22T02:59:26+09:00] Confirmed target repo, excluded credentials, fetched origin and adopted main (LICENSE-only upstream). Pi 0.86.1 documentation provides canonical context injection and custom data entries. Docker Desktop Linux VM available. Chose extension rather than fork.
+[2026-09-22T03:27:10+09:00] 6 tests pass Windows/Linux including real Pi SDK ephemerality. First VM live comparison: main and thought LLM use OpenCodex gpt-5.5, Jev API succeeds. Main model ignores two whispers and produces ordinary sorter. Keep failure evidence; revise mode framing, not success criterion.
+[2026-09-22T03:33:58+09:00] Explicit operator-selected creative mode produces 4 observed detours. Parent review found branch snapshot reference aliasing and empty-tool-call repetition bias; fixed both with regression checks.
+[2026-09-22T03:47:13+09:00] Hardened final live comparison passes: normal Pi 4 turns/1 file; Unharnessed 11 turns/4 files, 3 real intrusive responses, 10 real Jev responses, 4 transitions. No tool failures. Source hashes and reviewed synthetic artifacts recorded under docs/evidence.
+[2026-09-22T03:51:22+09:00] 9 tests pass; generated JS reruns in offline read-only container; production CLI smoke returns CLI_OK. npm audit zero vulnerabilities. Secret files ignored and excluded from Docker/npm packages. Validation budget extended 5m explicitly for final SDK off-mode check and evidence; release audit starts.

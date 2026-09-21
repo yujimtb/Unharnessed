@@ -1,0 +1,13 @@
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!Dockerfile
+!src/
+!src/**
+!test/
+!test/**
+!scripts/
+!scripts/**
+!examples/
+!examples/**

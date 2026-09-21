@@ -1,0 +1,62 @@
+tasks:
+  - id: implement
+    parent: null
+    goal: Build the minimal Pi extension and layered dynamics
+    serves_objective: All five MVP criteria and requested exploratory concepts
+    status: done
+    priority: 1
+    dependencies: []
+    assumptions: [Pi context hook supports transient custom messages]
+    owner: parent
+    delegated_to: null
+    created_at: 2026-09-22T02:59:26+09:00
+    started_at: 2026-09-22T02:59:26+09:00
+    deadline: null
+    time_budget: 40m (accepted; implementation complete within budget)
+    last_checked_at: 2026-09-22T02:59:26+09:00
+    expected_deliverable: Pi package with state, API integration, commands and attention tool
+    acceptance_criteria: [Typecheck passes, deterministic invariants pass, secret excluded]
+    stop_condition: Working extension with tests
+    reframe_if: [Pi context hook persists messages]
+    result: Typecheck and invariant checks pass; live behavior improved with explicit exploration-mode section.
+  - id: verify
+    parent: null
+    goal: Demonstrate genuine unusual behavior in VM-backed isolation
+    serves_objective: Success is observed dynamics rather than code elegance
+    status: done
+    priority: 1
+    dependencies: [implement]
+    assumptions: [OpenCodex and Jev reachable from Docker Desktop]
+    owner: parent
+    delegated_to: null
+    created_at: 2026-09-22T02:59:26+09:00
+    started_at: 2026-09-22T03:20:11+09:00
+    deadline: null
+    time_budget: 30m plus explicit 5m extension for final off-mode SDK check/evidence extraction
+    last_checked_at: 2026-09-22T03:51:22+09:00
+    expected_deliverable: Reproducible live comparison and session/injection evidence
+    evidence_so_far: run-03 passed; 3 genuine thoughts, 10 Jev responses, 4 whispers and attention transitions; no tool failures
+    acceptance_criteria: [Real OpenCodex intrusion, real Jev scores, ordinary-vs-Unharnessed artifact comparison, stop and failure checks]
+    stop_condition: Evidence supports each criterion
+    reframe_if: [Whispers ignored, Isolation inadequate]
+    result: Final run-04 passed; 4 runnable artifacts, 4 transitions, 3 context-free thoughts, 10 Jev responses; 9 tests and container CLI smoke pass.
+  - id: release
+    parent: null
+    goal: Document and publish verified implementation
+    serves_objective: User can reproduce and use Unharnessed
+    status: active
+    priority: 2
+    dependencies: [verify]
+    assumptions: [GitHub auth remains available]
+    owner: parent
+    delegated_to: null
+    created_at: 2026-09-22T02:59:26+09:00
+    started_at: 2026-09-22T03:51:22+09:00
+    deadline: null
+    time_budget: 15m
+    last_checked_at: 2026-09-22T03:51:22+09:00
+    expected_deliverable: README, evidence report, clean main branch pushed to origin
+    acceptance_criteria: [Requirement-by-requirement audit, no secrets, remote commit matches]
+    stop_condition: Full audit complete and push verified
+    reframe_if: [Live evidence fails an MVP requirement]
+    result: null
