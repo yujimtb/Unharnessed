@@ -2,7 +2,7 @@
 
 **普通に収束するcoding agentではなく、脱線を実際の成果物にしてしまうPi extension。**
 
-[`idea.md`](idea.md) の実装。tool result / user / assistant / error / turn / compactionを観測し、次のモデル入力だけに **ephemeral whisper** を挿入します。タスクを知らない別LLMの衝動、退屈、七つの大罪、架空のprior、Thanatosが同じ経路を通ります。Piのforkや独自agent frameworkはありません。
+[`idea.md`](idea.md) の実装。tool result / user / assistant / error / turn / compactionを観測し、モデル入力へwhisperを挿入します。タスクを知らない別LLMが生成したintrusive thoughtは、最初の注入後にmain agent自身のconversation historyへも残ります。その他のdriveやoperator whisperはephemeralにできます。Piのforkや独自agent frameworkはありません。
 
 > 実験用です。正しい実装・元のタスクの完了・自動修復は保証しません。**使い捨てVMを推奨**。本番リポジトリ、SSH鍵、クラウド認証、ホストのホーム、Docker socketを渡さないでください。whisperは権限拡張や停止拒否の仕組みではありません。
 
@@ -117,16 +117,19 @@ Pi events -> bounded state + heuristic/Jev estimates
                       |
                context hook (唯一のwhisper注入点)
                       |
-   fresh OpenCodex call -> labeled custom message -> 次のmain LLM callのみ
+   fresh OpenCodex call -> labeled whisper -> main LLMへ注入
+                                      |
+                           intrusive thoughtだけconversation historyへ記録
 ```
 
 - 別LLMには固定の発想生成promptとランダムtokenだけを送信。task、会話、cwd、tool、stateは渡さず、毎回新規routing session ID。関連性フィルタはありません。
 - Jevは公式 `POST https://api.typesafe.ai/v1/systemone` の `jev-latest` / `noul` で7指標を評価。tool名、byte数、反復/errorフラグ等の**構造化telemetryだけ**を送ります。tool本文、パス、会話、fingerprintは送信しません。従ってsemanticな驚き・好奇心の推定は粗く、感情や意識の計測ではありません。
 - 各proposed tool callもJevへ構造化shapeだけ送り、`boringness`を0..1で取得します。`Math.random() < boringness × boringBlockRate`ならPiの`tool_call` preflightでblockし、モデルへ別の介入を選ぶよう理由を返します。実引数の文字列内容はJevへ送りません。
 - Jev失敗・timeout・キーなしではtool callをblockせず、既存heuristicも継続。別LLM失敗はauditに明示し、`drive` whisperへfallback。固定文をLLM生成と偽りません。
-- whisperは `context` が返すコピーにだけ追加。`sendMessage` / `sendUserMessage` / 永続custom messageは使いません。Pi内部では`role: custom`、wire上はPiの仕様でuser roleに変換されますが明確な内部刺激ラベルが付きます。
-- 永続化するのはdrive state、fingerprint、decision、whisperの種類/hash、API使用token数とattention履歴。**whisper原文は保存しません**。モデルが自分の発言や成果物で引用した内容までは消去しません。delusion自体はpersistent設定です。
-- `unharnessed:audit` / `unharnessed:whisper` のPi event busで観察可能。通常は原文非保存ですが、比較scriptは明示的に原文とprovider入力を記録するため、出力はprivate扱いです。
+- whisperの即時注入は `context` が返すコピーへ追加します。intrusive thoughtはmain modelがそのcallで実際に経験した後のturn boundaryで `sendMessage(..., { triggerTurn: false })` のhidden custom messageとしてsessionへ保存します。以後のmodel callでは通常のconversation historyとして見え、resume / fork / compactionにも追従します。operator whisperやdrive等は従来どおりephemeralです。
+- intrusive thought生成器は毎回固定prompt + random tokenだけでfresh routing sessionを使い、`cacheRetention: none`。main agentのtask、conversation、cwd、tool、stateだけでなく過去のintrusive thoughtも生成器には渡しません。生成器の無文脈性とmain agentの記憶は独立しています。
+- drive state、fingerprint、decision、API使用token数、attention履歴に加えて、生成されたintrusive thought原文とemitted whisper原文をsession auditへ保存します。したがってモデルへ再提示しないephemeral whisperも後から観測できます。delusion自体はpersistent設定です。
+- `unharnessed:audit` / `unharnessed:whisper` のPi event busでも観察可能。比較scriptのprovider入力やartifactも引き続きprivate扱いです。
 - 世代番号とAbortSignalでoff/終了/branch変更後の遅延結果を破棄。state snapshotはdeep copyで、過去のbranchの状態を後から書き換えません。
 
 ## 実モデル比較
@@ -145,7 +148,7 @@ docker run --name unharnessed-compare \
 docker cp unharnessed-compare:/lab ./artifacts/comparison
 ```
 
-同じユーザーprompt・同じ主モデルで通常PiとUnharnessedを順に実行。実LLM thought、実Jev、attention遷移、tool errorなし、ephemeral非保存をassertします。各runは14ターン/240秒で中断し、無限に動かしません。既存成果物による比較汚染を避けるため、空でないvolumeは拒否します。生成物の質は非決定的なので、失敗ならtraceを見てください。
+同じユーザーprompt・同じ主モデルで通常PiとUnharnessedを順に実行。実LLM thought、実Jev、attention遷移、tool errorなし、intrusive thoughtの生成器側無文脈性とmain-agent側永続化を検証します。各runは14ターン/240秒で中断し、無限に動かしません。既存成果物による比較汚染を避けるため、空でないvolumeは拒否します。生成物の質は非決定的なので、失敗ならtraceを見てください。
 
 検証済みの比較と失敗からの修正は [`docs/verification.md`](docs/verification.md)。これは単発の挙動観察であり、創造性の統計的benchmarkではありません。
 

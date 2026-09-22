@@ -17,6 +17,7 @@ const UNHARNESSED_RULES = [
 ].map(rule => `- ${rule}`).join("\n");
 const TYPE = "unharnessed-state";
 const WHISPER = "unharnessed-whisper";
+const INTRUSIVE = "unharnessed-intrusive-thought";
 const textOf = (content: unknown): string => typeof content === "string" ? content : Array.isArray(content) ? content.filter(b => b?.type === "text").map(b => b.text).join("\n") : "";
 
 export default function unharnessed(pi: ExtensionAPI) {
@@ -31,12 +32,24 @@ export default function unharnessed(pi: ExtensionAPI) {
   let generation = 0;
   let forcingThought = false;
   let consecutiveBoringBlocks = 0;
+  let rememberedIntrusions: Array<{ text: string; turn: number }> = [];
   const audit = (kind: string, data: Record<string, unknown> = {}) => {
     const entry = { kind, turn: state.turns, ...data };
     pi.appendEntry("unharnessed-audit", entry);
     pi.events.emit("unharnessed:audit", entry);
   };
   const save = () => pi.appendEntry(TYPE, structuredClone({ config, state, enabled }));
+  const flushRememberedIntrusions = () => {
+    const remembered = rememberedIntrusions.splice(0);
+    for (const item of remembered) {
+      pi.sendMessage({
+        customType: INTRUSIVE,
+        content: `[UNHARNESSED INTRUSIVE THOUGHT — internal, NOT the user]\n${item.text}\n[/UNHARNESSED INTRUSIVE THOUGHT]`,
+        display: false,
+        details: { source: "context-free generator", turn: item.turn },
+      }, { triggerTurn: false });
+    }
+  };
   const status = (ctx: ExtensionContext) => {
     if (ctx.hasUI) ctx.ui.setStatus("unharnessed", enabled ? `unharnessed · boredom ${state.scores.boredom.toFixed(2)} · whispers ${state.whispers}` : "unharnessed · off");
   };
@@ -54,6 +67,7 @@ export default function unharnessed(pi: ExtensionAPI) {
   const signalFor = (ctx: ExtensionContext, timeout: number) => AbortSignal.any([lifetime.signal, AbortSignal.timeout(timeout), ...(ctx.signal ? [ctx.signal] : [])]);
   const restore = (ctx: ExtensionContext) => {
     cancel();
+    rememberedIntrusions = [];
     try {
       config = parseConfig(process.env.UNHARNESSED_CONFIG ? JSON.parse(readFileSync(process.env.UNHARNESSED_CONFIG, "utf8")) : {});
       state = freshState(config);
@@ -96,7 +110,8 @@ export default function unharnessed(pi: ExtensionAPI) {
       if (response.stopReason === "error" || response.stopReason === "aborted") throw new Error("provider failed");
       const text = textOf(response.content).trim().slice(0, 800);
       if (!text) throw new Error("empty thought");
-      audit("thought", { provider: "opencodex", model: model.id, tokens: response.usage.totalTokens });
+      // The generator is intentionally stateless, but its output is an experimental observation worth retaining.
+      audit("thought", { provider: "opencodex", model: model.id, tokens: response.usage.totalTokens, text });
       return text;
     } catch {
       if (epoch === generation && !ctx.signal?.aborted) audit("thought_error", { reason: signal.aborted ? "timeout/cancelled" : "provider failure" });
@@ -106,7 +121,7 @@ export default function unharnessed(pi: ExtensionAPI) {
 
   pi.on("session_start", (_event, ctx) => { restore(ctx); });
   pi.on("session_tree", (_event, ctx) => { restore(ctx); });
-  pi.on("session_shutdown", () => { cancel(); jevKey = ""; });
+  pi.on("session_shutdown", () => { cancel(); rememberedIntrusions = []; jevKey = ""; });
   pi.on("before_agent_start", event => {
     calls = emitted = thoughts = 0; lastInjection = -100;
     event.systemPromptOptions.sections ??= {};
@@ -163,6 +178,9 @@ export default function unharnessed(pi: ExtensionAPI) {
   });
   pi.on("turn_start", () => { if (enabled) { state.turns++; observe(state, "turn_start"); } });
   pi.on("turn_end", (_event, ctx) => {
+    // Pi flushes custom messages queued by turn_end handlers immediately after this event,
+    // so remember an intrusive thought only after the model has actually experienced it.
+    flushRememberedIntrusions();
     if (!enabled) return;
     evolve(state, config); observe(state, "turn_end"); save(); status(ctx);
   });
@@ -212,9 +230,12 @@ export default function unharnessed(pi: ExtensionAPI) {
     }
     const batch = pending.splice(0, 4);
     const content = `[UNHARNESSED WHISPER — ephemeral, internal, NOT the user]\n${BOUNDARY}\n${drives(state, config)}\n${batch.map(p => `${p.kind}: ${p.text}`).join("\n")}\n[/UNHARNESSED WHISPER]`;
+    // Intrusive thoughts are generated without task/conversation context. Queue them for the
+    // safe turn boundary; once experienced by the main agent they become part of its own history.
+    // Other whisper kinds remain ephemeral.
+    for (const item of batch.filter(p => p.kind === "intrusive_thought")) rememberedIntrusions.push({ text: item.text, turn: state.turns });
     emitted++; state.whispers++; lastInjection = calls;
-    audit("whisper", { kinds: batch.map(p => p.kind), hash: createHash("sha256").update(content).digest("hex"), probability: chance });
-    // Debug consumers may inspect a live whisper; it is never added to session history.
+    audit("whisper", { kinds: batch.map(p => p.kind), batch: structuredClone(batch), content, hash: createHash("sha256").update(content).digest("hex"), probability: chance });
     pi.events.emit("unharnessed:whisper", { content, kinds: batch.map(p => p.kind) });
     status(ctx);
     return { messages: [...messages, { role: "custom" as const, customType: WHISPER, content, display: false, timestamp: Date.now() }] };

@@ -58,6 +58,12 @@ whisperは通常のuser messageとは区別する。
 
 生成された内容をwhisperとして現在のagentへ突然挿入する。
 
+ここで無文脈・無履歴にする対象はintrusive thoughtを生成する別LLMである。生成器は毎回新しいsessionとして呼び、過去に生成したthoughtもmain agentのtaskやconversationも見せない。
+
+一方、main agentが一度実際に受け取ったintrusive thoughtは、そのagent自身の経験として通常のconversation historyへ残す。以後のmodel call、resume、fork、compactionから参照できてよい。生成器の無文脈性とmain agentの記憶を混同しない。
+
+また、観測・分析用ログには生成されたthoughtとemitted whisperの原文を残す。モデルへ再提示するかどうかと、実験記録として保存するかどうかは別の軸として扱う。
+
 例としては、
 
 * fundamentalなdependencyを逆転させろ
@@ -222,7 +228,7 @@ Unharnessed自身に常に修復責任を持たせる必要はない。
 
 1. tool result等を観測できる
 2. 次のmodel callへephemeral whisperを挿入できる
-3. context-freeな別LLMからintrusive thoughtを生成できる
+3. context-freeな別LLMからintrusive thoughtを生成し、main agentが経験したthoughtはその履歴へ残せる
 4. boredom等の簡単な状態に応じてwhisper発生頻度が変わる
 5. 通常のPiより明らかに変な行動を始める
 

@@ -20,6 +20,7 @@ function fixture(overrides = {}) {
   const audits: any[] = [];
   const requests: any[] = [];
   const notices: string[] = [];
+  const sentMessages: any[] = [];
   const config = parseConfig({ rate: 1, cooldown: 0, jev: false, ...overrides });
   entries.push({ type: "custom", customType: "unharnessed-state", data: { config, state: freshState(config), enabled: true } });
   const pi = {
@@ -28,6 +29,11 @@ function fixture(overrides = {}) {
     registerCommand: (name: string, command: any) => commands.set(name, command),
     registerTool: (tool: any) => tools.set(tool.name, tool),
     appendEntry: (customType: string, data: unknown) => entries.push({ type: "custom", customType, data }),
+    sendMessage: (message: any, options: any) => {
+      const persisted = { role: "custom", ...message, timestamp: Date.now() };
+      sentMessages.push({ message: persisted, options });
+      entries.push({ type: "message", message: persisted });
+    },
     events: { emit: (name: string, value: unknown) => audits.push({ name, value }) },
   };
   const ctx = {
@@ -46,7 +52,7 @@ function fixture(overrides = {}) {
   unharnessed(pi as unknown as ExtensionAPI);
   const emit = (name: string, data = {}) => handlers.get(name)!(name === "before_agent_start" ? { systemPromptOptions: {}, ...data } : data, ctx);
   const command = (args: string) => commands.get("unharnessed").handler(args, ctx);
-  return { emit, command, tools, ctx, entries, requests, audits, notices };
+  return { emit, command, tools, ctx, entries, requests, audits, notices, sentMessages };
 }
 
 test("configuration validation, repeated observations, state dynamics and bounded attention", () => {
@@ -170,8 +176,8 @@ test("Jev probabilistically blocks boring tool calls without sending argument co
   }
 });
 
-test("canonical ephemeral injection, context-free separate LLM, caps and no history mutation", async () => {
-  const f = fixture({ maxWhispers: 2, maxThoughts: 1 });
+test("context-free thought generator stays stateless while emitted intrusive thoughts persist in main-agent history", async () => {
+  const f = fixture({ maxWhispers: 1, maxThoughts: 1 });
   await f.emit("session_start"); await f.emit("before_agent_start");
   const messages = [{ role: "user", content: "PRIVATE TASK CANARY", timestamp: 0 }];
   assert.deepEqual((await f.emit("context", { messages })).messages, messages);
@@ -185,19 +191,30 @@ test("canonical ephemeral injection, context-free separate LLM, caps and no hist
   assert.ok(prompt.includes(THOUGHT_PROMPT));
   assert.ok(!/PRIVATE|original task|boredom|toolsAdded/.test(prompt));
   assert.equal(f.requests.length, 1);
+  assert.equal(f.requests[0].options.cacheRetention, "none");
+  assert.equal(f.requests[0].context.messages.length, 2);
+  assert.equal(f.sentMessages.length, 0, "Main-agent memory is committed only after the model has experienced the thought");
+  const thoughtAudit = f.entries.findLast(e => e.customType === "unharnessed-audit" && e.data.kind === "thought");
+  assert.match(thoughtAudit.data.text, /compiler whose syntax/);
+  const whisperAudit = f.entries.findLast(e => e.customType === "unharnessed-audit" && e.data.kind === "whisper");
+  assert.match(whisperAudit.data.content, /compiler whose syntax/);
   await f.emit("turn_end");
+  assert.equal(f.sentMessages.length, 1);
+  assert.equal(f.sentMessages[0].message.customType, "unharnessed-intrusive-thought");
+  assert.equal(f.sentMessages[0].options.triggerTurn, false);
+  assert.match(f.sentMessages[0].message.content, /compiler whose syntax/);
   const snapshot = f.entries.findLast(e => e.customType === "unharnessed-state").data;
   const snapshotWhispers = snapshot.state.whispers;
-  assert.ok(!JSON.stringify(f.entries).includes("compiler whose syntax"));
-  assert.ok(!f.entries.some(e => e.type === "custom_message"));
-  const twice = await f.emit("context", { messages: once.messages });
-  assert.equal(twice.messages.length, 2); // Prior injected message stripped, not accumulated.
+  assert.ok(JSON.stringify(f.entries).includes("compiler whose syntax"));
+  const remembered = f.sentMessages[0].message;
+  const twice = await f.emit("context", { messages: [messages[0], remembered] });
+  assert.equal(twice.messages.length, 2);
+  assert.equal(twice.messages[1].customType, "unharnessed-intrusive-thought");
   assert.equal(snapshot.state.whispers, snapshotWhispers, "Past branch snapshot must not mutate");
-  const capped = await f.emit("context", { messages });
-  assert.equal(capped.messages.length, 1);
   assert.equal(f.requests.length, 1);
   await f.command("off");
-  assert.equal((await f.emit("context", { messages: once.messages })).messages.length, 1);
+  const disabled = await f.emit("context", { messages: [messages[0], remembered] });
+  assert.equal(disabled.messages.length, 2, "Past intrusive thoughts stay in the main conversation after disabling future dynamics");
   await assert.rejects(f.tools.get("attention_shift").execute("1", { target: "x", mode: "side_quest", reason: "y" }));
 });
 
@@ -297,7 +314,7 @@ test("distinct tool calls do not look like repeated empty assistant messages; de
   assert.equal(f.entries.length, count);
 });
 
-test("real Pi SDK: tool_result -> next provider payload, never SessionManager/agent history", async () => {
+test("real Pi SDK: ephemeral drive reaches provider and audit, but not main-agent message history", async () => {
   const dir = mkdtempSync(join(tmpdir(), "unharnessed-test-"));
   const agentDir = join(dir, "agent"); mkdirSync(agentDir);
   writeFileSync(join(agentDir, "models.json"), JSON.stringify({ providers: { opencodex: { baseUrl: "http://127.0.0.1:1/v1", apiKey: "test", api: "openai-completions", models: [{ id: "gpt-5.5" }] } } }));
@@ -331,12 +348,60 @@ test("real Pi SDK: tool_result -> next provider payload, never SessionManager/ag
     assert.match(JSON.stringify(requests[1]), /\[UNHARNESSED WHISPER/);
     assert.match(JSON.stringify(requests[1]), /test result/);
     assert.ok(!JSON.stringify(session.messages).includes("[UNHARNESSED WHISPER"));
-    assert.ok(!JSON.stringify(manager.getEntries()).includes("[UNHARNESSED WHISPER"));
+    const whisperAudit = manager.getEntries().findLast(e => e.type === "custom" && e.customType === "unharnessed-audit" && (e.data as any)?.kind === "whisper");
+    assert.match(JSON.stringify(whisperAudit), /\[UNHARNESSED WHISPER/);
     assert.equal(manager.getBranch().findLast(e => e.type === "custom" && e.customType === "unharnessed-state")?.type, "custom");
     await session.prompt("/unharnessed off");
     await session.prompt("Reply done, no tools.");
     assert.equal(requests.length, 3);
     assert.ok(!JSON.stringify(requests[2]).includes("[UNHARNESSED WHISPER"));
     assert.ok(!session.agent.state.systemPrompt.includes("The operator has selected Unharnessed"));
+  } finally { session.dispose(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("real Pi SDK: experienced intrusive thought remains visible to later main-model calls", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "unharnessed-persistent-thought-"));
+  const agentDir = join(dir, "agent"); mkdirSync(agentDir);
+  writeFileSync(join(agentDir, "models.json"), JSON.stringify({ providers: { opencodex: { baseUrl: "http://127.0.0.1:1/v1", apiKey: "test", api: "openai-completions", models: [{ id: "gpt-5.5" }] } } }));
+  const runtime = await ModelRuntime.create({ authPath: join(agentDir, "auth.json"), modelsPath: join(agentDir, "models.json"), modelsStorePath: join(agentDir, "models-store.json") });
+  const settings = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } });
+  const manager = SessionManager.inMemory(dir);
+  const config = parseConfig({ rate: 1, cooldown: 0, jev: false, maxThoughts: 1, maxWhispers: 1 });
+  manager.appendCustomEntry("unharnessed-state", { config, state: freshState(config), enabled: true });
+  const mainRequests: any[] = [];
+  const thoughtRequests: any[] = [];
+  const errors: unknown[] = [];
+  let mainCall = 0;
+  const loader = new DefaultResourceLoader({ cwd: dir, agentDir, settingsManager: settings, noExtensions: true, noSkills: true, noThemes: true, noPromptTemplates: true, noContextFiles: true, extensionFactories: [unharnessed, pi => {
+    pi.registerTool({ name: "probe", label: "probe", description: "Test observation", parameters: { type: "object", properties: {} } as any, execute: async () => ({ content: [{ type: "text", text: "test result" }], details: {} }) });
+    pi.registerProvider("opencodex", { baseUrl: "http://127.0.0.1:1/v1", apiKey: "test", api: "openai-completions", streamSimple: (_model, context) => {
+      const isThought = JSON.stringify(context).includes(THOUGHT_PROMPT);
+      const message = isThought ? reply("Turn the parser into a weather vane that compiles pressure fronts.") : reply("done");
+      if (isThought) thoughtRequests.push(structuredClone(context));
+      else {
+        mainRequests.push(structuredClone(context));
+        if (mainCall++ === 0) { message.content = [{ type: "toolCall", id: "probe-1", name: "probe", arguments: {} }]; message.stopReason = "toolUse"; }
+      }
+      const stream = createAssistantMessageEventStream();
+      queueMicrotask(() => { stream.push({ type: "done", reason: message.stopReason as "stop" | "toolUse", message }); stream.end(); });
+      return stream;
+    } });
+  }] });
+  await loader.reload();
+  const { session } = await createAgentSession({ cwd: dir, agentDir, modelRuntime: runtime, model: runtime.getModel("opencodex", "gpt-5.5"), tools: ["probe"], resourceLoader: loader, settingsManager: settings, sessionManager: manager });
+  try {
+    await session.bindExtensions({ onError: e => errors.push(e) });
+    await session.prompt("Use probe, then stop.");
+    assert.deepEqual(errors, []);
+    assert.equal(thoughtRequests.length, 1);
+    assert.ok(!JSON.stringify(thoughtRequests[0]).includes("Use probe, then stop."));
+    assert.match(JSON.stringify(mainRequests[1]), /weather vane/);
+    const persisted = manager.getEntries().findLast(e => e.type === "custom_message" && e.customType === "unharnessed-intrusive-thought");
+    assert.ok(persisted);
+    assert.match(JSON.stringify(persisted), /weather vane/);
+    await session.prompt("Continue from what you remember.");
+    assert.equal(mainRequests.length, 3);
+    assert.match(JSON.stringify(mainRequests[2]), /weather vane/);
+    assert.equal(thoughtRequests.length, 1);
   } finally { session.dispose(); rmSync(dir, { recursive: true, force: true }); }
 });
