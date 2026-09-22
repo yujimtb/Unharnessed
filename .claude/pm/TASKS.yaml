@@ -60,3 +60,23 @@ tasks:
     stop_condition: Full audit complete and push verified
     reframe_if: [Live evidence fails an MVP requirement]
     result: Published runtime 676754ac7f0441ae94a09d9e9cc1d9b5250480b7; origin/main hash matches. Credential/archive scan, evidence hashes, 9 tests Windows/Linux and CLI checks pass. Final PM closeout only.
+  - id: pi-latest
+    parent: null
+    goal: Use latest Pi and verify existing dynamics still work
+    serves_objective: User explicitly requested latest Pi
+    status: done
+    priority: 1
+    dependencies: [release]
+    assumptions: [Current npm latest is 0.87.0]
+    owner: parent
+    delegated_to: null
+    created_at: 2026-09-22T15:27:00+09:00
+    started_at: 2026-09-22T15:27:00+09:00
+    deadline: null
+    time_budget: 20m
+    last_checked_at: 2026-09-22T15:40:52+09:00
+    expected_deliverable: Latest dependencies/lockfile, Windows/Linux tests, live VM evidence and published update
+    acceptance_criteria: [Latest Pi resolves, tests pass, real OpenCodex/Jev VM comparison passes, history preserved, no secrets, remote hash matches]
+    stop_condition: Updated and verified main pushed
+    reframe_if: [Pi API breaks, provider unavailable]
+    result: Latest 0.87.0 resolved across Pi package family; 9 tests pass Windows/Linux; live VM comparison 3 thoughts, 9 Jev responses, 4 whispers/transitions, 3 runnable files; CLI_OK. Pushed 6660859400c6c08e83d7ef2fbffe13692ac68c43 and verified origin hash.
