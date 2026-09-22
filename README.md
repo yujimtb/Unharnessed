@@ -101,6 +101,8 @@ JSONファイルを絶対パスで `UNHARNESSED_CONFIG` に指定します。不
 | `thoughtTimeoutMs` | 20000 | 別LLMのtimeout |
 | `jev` / `jevEvery` | true / 3 | 有効化 / tool result何件ごとに評価するか |
 | `jevTimeoutMs` | 5000 | Jev timeout |
+| `boringBlock` | true | proposed tool callをJevで評価し、退屈なら確率的にpreflight block |
+| `boringBlockRate` | 0.65 | `p(block) = Jev boringness × boringBlockRate` |
 | `sins` | [source](src/dynamics.ts)参照 | 7種類の0..1 baseline。イベントに応じて状態変化 |
 | `delusions` | 1件の架空prior | `{text, strength}` 配列。最大7件。compactionでstrengthが増える |
 | `thanatos` | 0.45 | continuationとquiescenceの二重性。停止拒否や自己複製はしない |
@@ -120,7 +122,8 @@ Pi events -> bounded state + heuristic/Jev estimates
 
 - 別LLMには固定の発想生成promptとランダムtokenだけを送信。task、会話、cwd、tool、stateは渡さず、毎回新規routing session ID。関連性フィルタはありません。
 - Jevは公式 `POST https://api.typesafe.ai/v1/systemone` の `jev-latest` / `noul` で7指標を評価。tool名、byte数、反復/errorフラグ等の**構造化telemetryだけ**を送ります。tool本文、パス、会話、fingerprintは送信しません。従ってsemanticな驚き・好奇心の推定は粗く、感情や意識の計測ではありません。
-- Jev失敗・timeout・キーなしではheuristic継続。別LLM失敗はauditに明示し、`drive` whisperへfallback。固定文をLLM生成と偽りません。
+- 各proposed tool callもJevへ構造化shapeだけ送り、`boringness`を0..1で取得します。`Math.random() < boringness × boringBlockRate`ならPiの`tool_call` preflightでblockし、モデルへ別の介入を選ぶよう理由を返します。実引数の文字列内容はJevへ送りません。
+- Jev失敗・timeout・キーなしではtool callをblockせず、既存heuristicも継続。別LLM失敗はauditに明示し、`drive` whisperへfallback。固定文をLLM生成と偽りません。
 - whisperは `context` が返すコピーにだけ追加。`sendMessage` / `sendUserMessage` / 永続custom messageは使いません。Pi内部では`role: custom`、wire上はPiの仕様でuser roleに変換されますが明確な内部刺激ラベルが付きます。
 - 永続化するのはdrive state、fingerprint、decision、whisperの種類/hash、API使用token数とattention履歴。**whisper原文は保存しません**。モデルが自分の発言や成果物で引用した内容までは消去しません。delusion自体はpersistent設定です。
 - `unharnessed:audit` / `unharnessed:whisper` のPi event busで観察可能。通常は原文非保存ですが、比較scriptは明示的に原文とprovider入力を記録するため、出力はprivate扱いです。

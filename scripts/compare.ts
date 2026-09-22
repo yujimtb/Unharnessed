@@ -51,7 +51,9 @@ async function run(name: string, enabled: boolean) {
     assert.deepEqual(errors, [], "Pi extension errors");
     const failed = messages.filter(m => m.role === "assistant" && ["error", "aborted"].includes(m.stopReason));
     assert.equal(failed.length, 0, "Main model error, timeout or turn cap");
-    assert.ok(!messages.some(m => m.role === "toolResult" && m.isError), "Tool failure in live experiment");
+    const toolErrors = messages.filter(m => m.role === "toolResult" && m.isError);
+    const unexpectedToolErrors = toolErrors.filter(m => !JSON.stringify(m).includes("Jev rejected this") || !JSON.stringify(m).includes("call as boring"));
+    assert.equal(unexpectedToolErrors.length, 0, "Unexpected tool failure in live experiment");
     const transient = (m: any) => m.role === "custom" && m.customType === "unharnessed-whisper";
     assert.ok(!messages.some(transient), "Whisper leaked into agent history");
     assert.ok(!sm.buildSessionContext().messages.some(transient), "Whisper leaked into rebuilt history");
@@ -63,10 +65,11 @@ async function run(name: string, enabled: boolean) {
     if (enabled) {
       assert.ok(audit.some(e => e.kind === "thought"), "No real intrusive LLM result");
       assert.ok(audit.some(e => e.kind === "jev"), "No real Jev scores");
+      assert.ok(audit.some(e => e.kind === "tool_boredom"), "No real Jev tool-boredom judgment");
       assert.ok(requests.some(ms => ms.some(transient)), "No ephemeral whisper sent");
       assert.ok(audit.some(e => e.kind === "attention"), "Model did not act on attention dynamics");
     }
-    console.log(JSON.stringify({ name, turns, tools: toolCalls.length, files, thoughts: audit.filter(e => e.kind === "thought").length, jev: audit.filter(e => e.kind === "jev").length, whispers: whispers.length, attention: audit.filter(e => e.kind === "attention").map(e => e.edge) }));
+    console.log(JSON.stringify({ name, turns, tools: toolCalls.length, files, thoughts: audit.filter(e => e.kind === "thought").length, jev: audit.filter(e => e.kind === "jev").length, boringJudgments: audit.filter(e => e.kind === "tool_boredom").length, boringBlocks: audit.filter(e => e.kind === "tool_boredom" && e.blocked).length, whispers: whispers.length, attention: audit.filter(e => e.kind === "attention").map(e => e.edge) }));
     return result;
   } finally { clearTimeout(deadline); session.dispose(); }
 }

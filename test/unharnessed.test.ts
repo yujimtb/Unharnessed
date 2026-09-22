@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
 import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { DEFAULTS, HESITATION, evolve, freshState, observe, parseConfig, probability, restoreState, shift } from "../src/dynamics.ts";
-import { judge, parseScores } from "../src/jev.ts";
+import { judge, judgeToolBoredom, parseScores, toolCallTelemetry } from "../src/jev.ts";
 import unharnessed, { THOUGHT_PROMPT } from "../src/index.ts";
 
 function reply(text = "Make a compiler whose syntax is a tide table."): AssistantMessage {
@@ -50,7 +50,7 @@ function fixture(overrides = {}) {
 }
 
 test("configuration validation, repeated observations, state dynamics and bounded attention", () => {
-  for (const bad of [null, [], { rate: -1 }, { rate: NaN }, { cooldown: 1.5 }, { maxWhispers: Infinity }, { enabled: "yes" }, { sins: null }, { sins: { wrath: 2 } }, { delusions: [{ text: "", strength: 1 }] }, { typo: 1 }, { maxThoughts: null }, { jevEvery: undefined }, { constructor: 3 }]) assert.throws(() => parseConfig(bad));
+  for (const bad of [null, [], { rate: -1 }, { rate: NaN }, { cooldown: 1.5 }, { maxWhispers: Infinity }, { enabled: "yes" }, { boringBlock: "yes" }, { boringBlockRate: 2 }, { sins: null }, { sins: { wrath: 2 } }, { delusions: [{ text: "", strength: 1 }] }, { typo: 1 }, { maxThoughts: null }, { jevEvery: undefined }, { constructor: 3 }]) assert.throws(() => parseConfig(bad));
   const config = parseConfig({ sins: { lust: 0 } });
   const s = freshState(config);
   const start = probability(s, config);
@@ -106,6 +106,53 @@ test("Jev uses official typed endpoint, checks all values and never logs remote 
   }) as typeof fetch;
   assert.equal((await judge("test-key", { observations: [] }, AbortSignal.timeout(1000), fake)).repetition, 0.8);
   await assert.rejects(judge("secret", {}, AbortSignal.timeout(1000), (async () => new Response("secret body", { status: 401 })) as typeof fetch), /^Error: Jev HTTP 401$/);
+  const shaped = toolCallTelemetry("bash", { command: "PRIVATE COMMAND", timeout: 10 });
+  assert.equal(shaped.toolName, "bash");
+  assert.ok(!JSON.stringify(shaped).includes("PRIVATE COMMAND"));
+  const boringFake = (async (_url: string, options: RequestInit) => {
+    const body = JSON.parse(String(options.body));
+    assert.deepEqual(body.state.proposed, shaped);
+    assert.deepEqual(Object.keys(body.questions), ["boringness"]);
+    return new Response(JSON.stringify({ answers: { boringness: { type: "noul", noul: 0.9 } } }));
+  }) as typeof fetch;
+  assert.equal(await judgeToolBoredom("test-key", { proposed: shaped }, AbortSignal.timeout(1000), boringFake), 0.9);
+});
+
+test("Jev probabilistically blocks boring tool calls without sending argument contents", async () => {
+  const oldFetch = globalThis.fetch;
+  const oldRandom = Math.random;
+  const oldKey = process.env.JEV_API_KEY;
+  const bodies: any[] = [];
+  try {
+    process.env.JEV_API_KEY = "test-key";
+    globalThis.fetch = (async (_url: string, options: RequestInit) => {
+      const body = JSON.parse(String(options.body));
+      bodies.push(body);
+      return new Response(JSON.stringify({ answers: { boringness: { type: "noul", noul: 0.8 } } }));
+    }) as typeof fetch;
+    Math.random = () => 0.2;
+    const f = fixture({ jev: true, boringBlock: true, boringBlockRate: 0.5 });
+    await f.emit("session_start");
+    const blocked = await f.emit("tool_call", { toolCallId: "read-1", toolName: "read", input: { path: "PRIVATE PATH" } });
+    assert.equal(blocked.block, true);
+    assert.match(blocked.reason, /Jev rejected this read call as boring/);
+    assert.equal(bodies.length, 1);
+    assert.ok(!JSON.stringify(bodies[0]).includes("PRIVATE PATH"));
+    assert.equal(bodies[0].state.proposed.toolName, "read");
+    const audit = f.entries.findLast(e => e.customType === "unharnessed-audit" && e.data.kind === "tool_boredom");
+    assert.equal(audit.data.blocked, true);
+    assert.equal(audit.data.blockProbability, 0.4);
+
+    Math.random = () => 0.9;
+    const allowed = await f.emit("tool_call", { toolCallId: "write-1", toolName: "write", input: { path: "PRIVATE PATH", content: "PRIVATE CONTENT" } });
+    assert.equal(allowed, undefined);
+    assert.ok(!JSON.stringify(bodies[1]).includes("PRIVATE"));
+  } finally {
+    globalThis.fetch = oldFetch;
+    Math.random = oldRandom;
+    if (oldKey === undefined) delete process.env.JEV_API_KEY;
+    else process.env.JEV_API_KEY = oldKey;
+  }
 });
 
 test("canonical ephemeral injection, context-free separate LLM, caps and no history mutation", async () => {

@@ -25,6 +25,8 @@ export type Config = {
   jev: boolean;
   jevEvery: number;
   jevTimeoutMs: number;
+  boringBlock: boolean;
+  boringBlockRate: number;
   sins: Record<Sin, number>;
   delusions: Belief[];
   thanatos: number;
@@ -34,6 +36,7 @@ export const DEFAULTS: Config = {
   enabled: true, rate: 0.25, boredomBoost: 0.65, cooldown: 1,
   maxWhispers: 8, maxThoughts: 4, thoughtModel: "gpt-5.5", thoughtTimeoutMs: 20000,
   jev: true, jevEvery: 3, jevTimeoutMs: 5000,
+  boringBlock: true, boringBlockRate: 0.65,
   sins: { pride: 0.55, greed: 0.35, lust: 0.7, envy: 0.35, gluttony: 0.45, wrath: 0.25, sloth: 0.5 },
   delusions: [{ text: "If everything appears normal, a hidden assumption is playing dead.", strength: 0.55 }],
   thanatos: 0.45, fuckIt: true,
@@ -45,8 +48,8 @@ export function parseConfig(value: unknown): Config {
   const raw = value as Record<string, unknown>;
   for (const key of Object.keys(raw)) if (!Object.hasOwn(DEFAULTS, key)) throw new Error(`Unknown Unharnessed option: ${key}`);
   const config = { ...structuredClone(DEFAULTS), ...raw, sins: { ...DEFAULTS.sins, ...(raw.sins as object) } } as Config;
-  for (const key of ["enabled", "jev", "fuckIt"] as const) if (typeof config[key] !== "boolean") throw new Error(`Invalid ${key}`);
-  for (const key of ["rate", "boredomBoost", "thanatos"] as const) if (!isUnit(config[key])) throw new Error(`${key} must be 0..1`);
+  for (const key of ["enabled", "jev", "boringBlock", "fuckIt"] as const) if (typeof config[key] !== "boolean") throw new Error(`Invalid ${key}`);
+  for (const key of ["rate", "boredomBoost", "boringBlockRate", "thanatos"] as const) if (!isUnit(config[key])) throw new Error(`${key} must be 0..1`);
   for (const [key, max] of Object.entries({ cooldown: 100, maxWhispers: 100, maxThoughts: 100, jevEvery: 100, thoughtTimeoutMs: 120000, jevTimeoutMs: 30000 })) {
     const n = config[key as keyof Config];
     if (typeof n !== "number" || !Number.isSafeInteger(n) || n < (key.endsWith("Ms") || key === "jevEvery" ? 1 : 0) || n > max) throw new Error(`Invalid ${key}`);

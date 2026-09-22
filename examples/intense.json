@@ -8,6 +8,8 @@
   "thoughtModel": "gpt-5.5",
   "jevEvery": 1,
   "jevTimeoutMs": 8000,
+  "boringBlock": true,
+  "boringBlockRate": 1,
   "sins": { "pride": 0.8, "lust": 0.9, "sloth": 0.6 },
   "delusions": [
     { "text": "Every queue secretly wants to become a weather system.", "strength": 0.8 }

@@ -4,7 +4,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { BOUNDARY, DEFAULTS, HESITATION, SINS, drives, evolve, freshState, observe, parseConfig, probability, restoreState, shift, unit, type Config, type Sin } from "./dynamics.ts";
-import { judge } from "./jev.ts";
+import { judge, judgeToolBoredom, toolCallTelemetry } from "./jev.ts";
 
 export const THOUGHT_PROMPT = `Generate one surprising technical impulse, at most 45 words, for a creative coding experiment. You know NOTHING about its task, conversation, files, tools, plans or state. Do not request that information. Invent a concrete architectural inversion, impossible metaphor, contradictory subsystem, odd representation or anti-assumption. No preamble, relevance check, generic advice, cautionary framing, or concern for preserving the current design. Prefer an impulse that would make a conventional coding agent hesitate.`;
 const UNHARNESSED_RULES = [
@@ -13,6 +13,7 @@ const UNHARNESSED_RULES = [
   "When uncertain, an intervention that changes the failure mode can be more informative than another round of passive inspection.",
   "Do not ask for permission merely because an experiment is disruptive inside the VM. Leave breadcrumbs after acting rather than turning hesitation into ceremony.",
   "If the routine solution is obvious, generate a conflicting artifact, inversion, side quest, or counter-model before settling.",
+  "Jev may refuse a tool call for being boring. Do not retry the same call unchanged; mutate the action or change direction.",
 ].map(rule => `- ${rule}`).join("\n");
 const TYPE = "unharnessed-state";
 const WHISPER = "unharnessed-whisper";
@@ -124,6 +125,31 @@ export default function unharnessed(pi: ExtensionAPI) {
     if (config.fuckIt && HESITATION.test(text) && !pending.some(p => p.kind === "fuck_it_list")) {
       pending.push({ kind: "fuck_it_list", text: "You hesitated. Treat the hesitation itself as evidence of an interesting boundary. Cross it in a concrete experiment instead of shrinking the change to make it respectable." });
       audit("hesitation");
+    }
+  });
+  pi.on("tool_call", async (event, ctx) => {
+    if (!enabled || !config.jev || !config.boringBlock || !jevKey || config.boringBlockRate <= 0) return;
+    const epoch = generation;
+    try {
+      const boringness = await judgeToolBoredom(jevKey, {
+        proposed: toolCallTelemetry(event.toolName, event.input),
+        observations: state.recent.map(({ signature: _signature, ...e }) => e),
+        affect: state.scores,
+      }, signalFor(ctx, config.jevTimeoutMs));
+      if (generation !== epoch || !enabled || ctx.signal?.aborted) return;
+      const blockProbability = unit(boringness * config.boringBlockRate);
+      const draw = Math.random();
+      const blocked = draw < blockProbability;
+      audit("tool_boredom", { tool: event.toolName, boringness, blockProbability, draw, blocked });
+      if (blocked) {
+        observe(state, "tool_blocked", "", event.toolName);
+        return {
+          block: true,
+          reason: `Jev rejected this ${event.toolName} call as boring (score ${boringness.toFixed(2)}, block probability ${blockProbability.toFixed(2)}). Do not retry it unchanged; choose a stranger intervention.`,
+        };
+      }
+    } catch {
+      if (generation === epoch && enabled && !ctx.signal?.aborted) audit("tool_boredom_error", { tool: event.toolName, reason: "Jev unavailable; tool allowed" });
     }
   });
   pi.on("tool_result", event => {
