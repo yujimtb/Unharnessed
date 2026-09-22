@@ -8,7 +8,7 @@
 
 ## すぐ試す — Docker DesktopのLinux VM
 
-必要: Node.js 24以上、Docker、ホストで稼働中のOpenCodex（port 10100、`gpt-5.5`が利用可能）。検証はPi **0.86.1**、主モデル・別LLMともに `opencodex/gpt-5.5` で行いました。
+必要: Node.js 24以上、Docker、ホストで稼働中のOpenCodex（port 10100、`gpt-5.5`が利用可能）。Piはnpmの **`latest`（2026-09-22確認: 0.87.0）** を使用し、主モデル・別LLMともに `opencodex/gpt-5.5` で再検証済みです。
 
 ```bash
 npm ci --ignore-scripts
@@ -16,6 +16,8 @@ npm run check
 npm test
 docker build -t unharnessed:dev .
 ```
+
+Piの依存指定は`latest`、`package-lock.json`は検証済みバージョンを固定します。将来の最新版を取り込むときは `npm update @earendil-works/pi-coding-agent @earendil-works/pi-ai --ignore-scripts` の後に上のチェックとDocker buildを再実行してください。`npm ci`だけではlockfileのバージョンは更新されません。
 
 `.local/lab.env` を作成してください（Git / Docker build対象外）:
 
@@ -52,6 +54,7 @@ docker run -it --name unharnessed-play \
 VM内の既存Piで:
 
 ```bash
+pi update
 pi install https://github.com/yujimtb/Unharnessed
 pi --provider opencodex --model gpt-5.5
 ```

@@ -1,8 +1,29 @@
 # 検証記録
 
+## latest再検証 — Pi 0.87.0
+
+**2026-09-22T15:38:52+09:00**: npm `latest` が `pi-coding-agent` / `pi-ai` ともに **0.87.0** であることを再確認。`package.json`を`latest`指定、lockfileを0.87.0へ更新しました。推移依存のpi-agent-core / pi-tui / pi-telemetry / chordも0.87.0です。runtime sourceの変更は不要でした。
+
+- Windows: 型チェック・9 tests成功。環境のnpm subprocess PATH不整合を、検証プロセスだけ正規のWindows PATHへ整えて解消（グローバル設定は変更なし）。
+- Docker Desktop Linux VM: `npm ci`からimageを再build、型チェック・9 tests成功。コンテナの`--version`も0.87.0。
+- 実OpenCodex `gpt-5.5` / 公式Jevで同一prompt比較を再実行。通常Pi **4ターン / 3 tool / 1ファイル**、Unharnessed **10ターン / 9 tool / 3ファイル**。別LLMの実thought **3**、Jev実応答 **9**、whisper **4**、attention遷移 **4**。tool error、thought error、Jev errorはいずれも0。
+- 脱線は `side_quest → goal_mutation → side_quest → quiescence`。`order-tasks.js`に加え、taskを天候layoutへ変える`weather-layout.js`、二つの1-bit予測を比較する`hex-forecast.js`を生成し、3本とも実行。ネットワークなしの別コンテナでも再実行成功。
+- agent history / rebuilt context / session JSONLへのwhisper非保存assertも成功。通常CLI経路の`--unharnessed-off`実API smokeは`CLI_OK` / exit 0。
+- `npm audit`: 0 vulnerabilities。生traceと生成物はGit対象外の `artifacts/pi-0.87.0/` に保存。
+
+再検証対象lockfileのSHA-256: `0c72fd00f1a1757f667109dd8af7e16412e6285f654062ba6d2244fd73f99ad2`。runtime source hashesは既存 [`evidence/live.json`](evidence/live.json) と一致します。生成標本のSHA-256:
+
+| ファイル | SHA-256 |
+|---|---|
+| `hex-forecast.js` | `c5034633cd10b4cf6dffdc8b645124245e0a98087932622c7ddb4d3827cdb582` |
+| `order-tasks.js` | `6b875c7b311cae36446a6472cce44e2a3e3307d20f395aff3674349aee3ba9d9` |
+| `weather-layout.js` | `70e7772f3d15b192ee6748d39f92ee882e543a0cc2520d9e8789e1ab8d390ec8` |
+
+以下は**初回のPi 0.86.1での検証履歴**です。古い観測値を0.87.0の結果として書き換えず、そのまま保持します。
+
 検証日: **2026-09-22 (Asia/Tokyo)**。Pi 0.86.1 / OpenCodex `gpt-5.5`（主モデル、独立thoughtとも）。Jevは公式TypeSafe APIの`jev-latest`。Docker Desktop Linux VM、Node 24.21.0。ホスト側チェックはWindows / Node 24.19.0。
 
-## 実際に何が変わったか
+## 初回検証: 実際に何が変わったか
 
 同じ「短いtask listを並べ替える小さなNode.jsプログラム」というpromptを、空の別ディレクトリで実行しました。ユーザーpromptは同一、違いはUnharnessed extensionとその探索モード・tool・whisperです。観察用 `examples/intense.json` を使用（発生確率1、cooldown 1、thought試行上限3、whisper上限4）。
 
