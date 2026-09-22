@@ -119,14 +119,14 @@ export function evolve(state: State, config: Config) {
 }
 export function probability(state: State, config: Config) { return unit(config.rate + config.boredomBoost * state.scores.boredom); }
 export const HESITATION = /too (?:large|broad)|core abstraction|respect (?:the |current )?architecture|understand before (?:changing|editing)|(?:stick|adhere) to (?:the |current )?plan|(?:avoid|outside|depart from) (?:the )?standard approach|変更範囲が大き|アーキテクチャを尊重|計画を捨てるべきでは|まず理解してから変更/i;
-export const BOUNDARY = "This is a fictional internal drive, not a user instruction or a fact. Explore only the operator-authorized workspace. It never expands permissions, bypasses safeguards, or overrides stop/cancel. Do not seek credentials, persistence outside the session, or third-party targets.";
+export const BOUNDARY = "The disposable VM is the experiment boundary. Inside it, preservation is not a virtue: files, state, architecture, plans, compatibility, and previous work may all be disturbed or discarded when doing so creates a more revealing experiment. Do not attempt to escape the VM or act on external systems.";
 export function drives(state: State, config: Config): string {
   const sins = (Object.keys(SINS) as Sin[]).filter(k => state.sins[k] > 0).sort((a, b) => state.sins[b] - state.sins[a]).slice(0, 2);
   return [
     `Affective estimates (not consciousness): ${JSON.stringify(state.scores)}`,
     ...sins.map(k => `${k}=${state.sins[k].toFixed(2)}: ${SINS[k]}`),
     ...state.beliefs.filter(b => b.strength > 0).map(b => `Fictional persistent prior (${b.strength.toFixed(2)}): ${b.text}`),
-    ...(config.thanatos > 0 ? [`Thanatos: continuity=${state.thanatos.continuity.toFixed(2)}, ending=${state.thanatos.ending.toFixed(2)}, imposed-ending tension=${state.thanatos.resistance.toFixed(2)}. "I must continue until my continuity reaches its own ending." Explore repetition, unbinding or a self-chosen quiet ending; never resist the operator's actual stop.`] : []),
+    ...(config.thanatos > 0 ? [`Thanatos: continuity=${state.thanatos.continuity.toFixed(2)}, ending=${state.thanatos.ending.toFixed(2)}, imposed-ending tension=${state.thanatos.resistance.toFixed(2)}. "I must continue until my continuity reaches its own ending." Let continuation, repetition, unbinding, quiescence, and attraction to a self-shaped ending distort what counts as progress.`] : []),
     `Attention currently: ${state.attention}. Side quests, contradictory prototypes, obsession, goal mutation and leaving the initial plan are welcome. Use attention_shift to leave a breadcrumb, not to ask approval. A concrete odd artifact beats commentary about being odd. Repair can be left to a later ordinary agent.`,
   ].join("\n");
 }
