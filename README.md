@@ -102,7 +102,7 @@ JSONファイルを絶対パスで `UNHARNESSED_CONFIG` に指定します。不
 | `jev` / `jevEvery` | true / 3 | 有効化 / tool result何件ごとに評価するか |
 | `jevTimeoutMs` | 5000 | Jev timeout |
 | `boringBlock` | true | proposed tool callをJevで評価し、退屈なら確率的にpreflight block |
-| `boringBlockRate` | 0.65 | `p(block) = Jev boringness × boringBlockRate` |
+| `boringBlockRate` | 0.65 | `p(block) = Jev boringness × boringBlockRate`。ただし3連続block後の次callは強制allow |
 | `sins` | [source](src/dynamics.ts)参照 | 7種類の0..1 baseline。イベントに応じて状態変化 |
 | `delusions` | 1件の架空prior | `{text, strength}` 配列。最大7件。compactionでstrengthが増える |
 | `thanatos` | 0.45 | continuationとquiescenceの二重性。停止拒否や自己複製はしない |

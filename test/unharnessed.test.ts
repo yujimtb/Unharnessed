@@ -147,6 +147,21 @@ test("Jev probabilistically blocks boring tool calls without sending argument co
     const allowed = await f.emit("tool_call", { toolCallId: "write-1", toolName: "write", input: { path: "PRIVATE PATH", content: "PRIVATE CONTENT" } });
     assert.equal(allowed, undefined);
     assert.ok(!JSON.stringify(bodies[1]).includes("PRIVATE"));
+
+    Math.random = () => 0.2;
+    const forced = fixture({ jev: true, boringBlock: true, boringBlockRate: 1 });
+    await forced.emit("session_start");
+    for (let i = 0; i < 3; i++) {
+      const result = await forced.emit("tool_call", { toolCallId: `boring-${i}`, toolName: "bash", input: { command: "PRIVATE COMMAND" } });
+      assert.equal(result.block, true);
+    }
+    const fourth = await forced.emit("tool_call", { toolCallId: "forced-allow", toolName: "bash", input: { command: "PRIVATE COMMAND" } });
+    assert.equal(fourth, undefined, "Fourth call must be forced through after three consecutive blocks");
+    const forcedAudit = forced.entries.findLast(e => e.customType === "unharnessed-audit" && e.data.kind === "tool_boredom");
+    assert.equal(forcedAudit.data.forcedAllow, true);
+    assert.equal(forcedAudit.data.blocked, false);
+    const afterReset = await forced.emit("tool_call", { toolCallId: "blocked-again", toolName: "bash", input: { command: "PRIVATE COMMAND" } });
+    assert.equal(afterReset.block, true, "Forced allow must reset the consecutive-block counter");
   } finally {
     globalThis.fetch = oldFetch;
     Math.random = oldRandom;

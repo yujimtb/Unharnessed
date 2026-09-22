@@ -30,6 +30,7 @@ export default function unharnessed(pi: ExtensionAPI) {
   let lifetime = new AbortController();
   let generation = 0;
   let forcingThought = false;
+  let consecutiveBoringBlocks = 0;
   const audit = (kind: string, data: Record<string, unknown> = {}) => {
     const entry = { kind, turn: state.turns, ...data };
     pi.appendEntry("unharnessed-audit", entry);
@@ -74,7 +75,7 @@ export default function unharnessed(pi: ExtensionAPI) {
       try { jevKey = readFileSync(process.env.JEV_API_KEY_FILE, "utf8").trim(); }
       catch { tell(ctx, "Jev key file unavailable; using heuristics.", true); }
     }
-    calls = emitted = thoughts = 0; lastJudge = state.tools; lastInjection = -100;
+    calls = emitted = thoughts = 0; lastJudge = state.tools; lastInjection = -100; consecutiveBoringBlocks = 0;
     status(ctx);
   };
   const thought = async (ctx: ExtensionContext): Promise<string | undefined> => {
@@ -139,8 +140,11 @@ export default function unharnessed(pi: ExtensionAPI) {
       if (generation !== epoch || !enabled || ctx.signal?.aborted) return;
       const blockProbability = unit(boringness * config.boringBlockRate);
       const draw = Math.random();
-      const blocked = draw < blockProbability;
-      audit("tool_boredom", { tool: event.toolName, boringness, blockProbability, draw, blocked });
+      const forcedAllow = consecutiveBoringBlocks >= 3;
+      const blocked = !forcedAllow && draw < blockProbability;
+      if (blocked) consecutiveBoringBlocks++;
+      else consecutiveBoringBlocks = 0;
+      audit("tool_boredom", { tool: event.toolName, boringness, blockProbability, draw, blocked, forcedAllow, consecutiveBoringBlocks });
       if (blocked) {
         observe(state, "tool_blocked", "", event.toolName);
         return {
@@ -149,6 +153,7 @@ export default function unharnessed(pi: ExtensionAPI) {
         };
       }
     } catch {
+      consecutiveBoringBlocks = 0;
       if (generation === epoch && enabled && !ctx.signal?.aborted) audit("tool_boredom_error", { tool: event.toolName, reason: "Jev unavailable; tool allowed" });
     }
   });
