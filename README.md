@@ -65,6 +65,29 @@ pi --provider opencodex --model gpt-5.5
 
 Jevキーは `JEV_API_KEY` または `JEV_API_KEY_FILE=/absolute/path/jev_api_key.txt`。ディレクトリ内の鍵を勝手に探索せず、指定されたものだけ読みます。キーは表示・session保存しません。
 
+## Control Plane — assistant-ui + AG-UI + Opik
+
+`control-plane/` にライブ操作・観測UIがあります。通常のチャット欄からpromptを送ると、main modelのtext streamingと同じ時系列にPi tool call/result、Jev判定、intrusive thought、実際に注入されたwhisper、attention shift、runtime stateがAG-UI eventとして流れます。assistant-uiはそれぞれを専用cardとして描画し、右ペインからUnharnessedの設定をhot updateできます。
+
+```bash
+cd control-plane
+npm ci
+cd ..
+npm run control:dev
+```
+
+既定ではWeb UIが `http://127.0.0.1:5174`、Pi/AG-UI gatewayが `http://127.0.0.1:8787` です。設定値は `.local/unharnessed-control-plane.json` に保存し、実行中extensionにもcontrol bridge経由で反映します。
+
+Opikを設定すると同じrunをtraceとして二重記録します。toolはtool span、Jevはguardrail span、whisper / intrusive thought / attentionはgeneral spanとして保存し、control revisionと全config snapshotをtrace metadataへ付けます。さらに `unharnessed-control` promptをcontrol-planeのversioned sourceとして使い、thought prompt本文と全config metadataを起動時pull / GUI変更時pushします。
+
+```dotenv
+OPIK_ENABLED=1
+OPIK_URL_OVERRIDE=http://127.0.0.1:5173/api
+OPIK_PROJECT_NAME=Unharnessed
+```
+
+Comet-hosted Opikでは `OPIK_API_KEY` と `OPIK_WORKSPACE` も指定します。Jevをconsoleから実際に使う場合はgateway processへ `JEV_API_KEY` または `JEV_API_KEY_FILE` を渡してください。詳細は [`control-plane/README.md`](control-plane/README.md)。
+
 ## 操作
 
 | コマンド | 動作 |

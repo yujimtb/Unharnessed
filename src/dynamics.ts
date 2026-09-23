@@ -13,6 +13,7 @@ export type Sin = keyof typeof SINS;
 export const METRICS = ["boredom", "repetition", "surprise", "informationGain", "fixation", "curiosity", "urgeToLeave"] as const;
 export type Scores = Record<(typeof METRICS)[number], number>;
 export type Belief = { text: string; strength: number };
+export const DEFAULT_THOUGHT_PROMPT = `Generate one surprising technical impulse, at most 45 words, for a creative coding experiment. You know NOTHING about its task, conversation, files, tools, plans or state. Do not request that information. Invent a concrete architectural inversion, impossible metaphor, contradictory subsystem, odd representation or anti-assumption. No preamble, relevance check, generic advice, cautionary framing, or concern for preserving the current design. Prefer an impulse that would make a conventional coding agent hesitate.`;
 export type Config = {
   enabled: boolean;
   rate: number;
@@ -21,12 +22,14 @@ export type Config = {
   maxWhispers: number;
   maxThoughts: number;
   thoughtModel: string;
+  thoughtPrompt: string;
   thoughtTimeoutMs: number;
   jev: boolean;
   jevEvery: number;
   jevTimeoutMs: number;
   boringBlock: boolean;
   boringBlockRate: number;
+  forceAllowAfter: number;
   sins: Record<Sin, number>;
   delusions: Belief[];
   thanatos: number;
@@ -34,9 +37,9 @@ export type Config = {
 };
 export const DEFAULTS: Config = {
   enabled: true, rate: 0.25, boredomBoost: 0.65, cooldown: 1,
-  maxWhispers: 8, maxThoughts: 4, thoughtModel: "gpt-5.5", thoughtTimeoutMs: 20000,
+  maxWhispers: 8, maxThoughts: 4, thoughtModel: "gpt-5.5", thoughtPrompt: DEFAULT_THOUGHT_PROMPT, thoughtTimeoutMs: 20000,
   jev: true, jevEvery: 3, jevTimeoutMs: 5000,
-  boringBlock: true, boringBlockRate: 0.65,
+  boringBlock: true, boringBlockRate: 0.65, forceAllowAfter: 3,
   sins: { pride: 0.55, greed: 0.35, lust: 0.7, envy: 0.35, gluttony: 0.45, wrath: 0.25, sloth: 0.5 },
   delusions: [{ text: "If everything appears normal, a hidden assumption is playing dead.", strength: 0.55 }],
   thanatos: 0.45, fuckIt: true,
@@ -50,11 +53,12 @@ export function parseConfig(value: unknown): Config {
   const config = { ...structuredClone(DEFAULTS), ...raw, sins: { ...DEFAULTS.sins, ...(raw.sins as object) } } as Config;
   for (const key of ["enabled", "jev", "boringBlock", "fuckIt"] as const) if (typeof config[key] !== "boolean") throw new Error(`Invalid ${key}`);
   for (const key of ["rate", "boredomBoost", "boringBlockRate", "thanatos"] as const) if (!isUnit(config[key])) throw new Error(`${key} must be 0..1`);
-  for (const [key, max] of Object.entries({ cooldown: 100, maxWhispers: 100, maxThoughts: 100, jevEvery: 100, thoughtTimeoutMs: 120000, jevTimeoutMs: 30000 })) {
+  for (const [key, max] of Object.entries({ cooldown: 100, maxWhispers: 100, maxThoughts: 100, jevEvery: 100, forceAllowAfter: 100, thoughtTimeoutMs: 120000, jevTimeoutMs: 30000 })) {
     const n = config[key as keyof Config];
     if (typeof n !== "number" || !Number.isSafeInteger(n) || n < (key.endsWith("Ms") || key === "jevEvery" ? 1 : 0) || n > max) throw new Error(`Invalid ${key}`);
   }
   if (typeof config.thoughtModel !== "string" || !config.thoughtModel.trim() || config.thoughtModel.length > 200) throw new Error("Invalid thoughtModel");
+  if (typeof config.thoughtPrompt !== "string" || !config.thoughtPrompt.trim() || config.thoughtPrompt.length > 8000) throw new Error("Invalid thoughtPrompt");
   if (raw.sins !== undefined && (!raw.sins || typeof raw.sins !== "object" || Array.isArray(raw.sins))) throw new Error("Invalid sins");
   for (const [key, n] of Object.entries(config.sins)) if (!Object.hasOwn(SINS, key) || !isUnit(n)) throw new Error(`Invalid sin: ${key}`);
   if (!Array.isArray(config.delusions) || config.delusions.length > 7 || config.delusions.some(b => !b || typeof b.text !== "string" || !b.text.trim() || b.text.length > 300 || !isUnit(b.strength))) throw new Error("Invalid delusions (max 7, text 1..300, strength 0..1)");

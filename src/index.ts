@@ -3,10 +3,21 @@ import { createHash, randomUUID } from "node:crypto";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
-import { BOUNDARY, DEFAULTS, HESITATION, SINS, drives, evolve, freshState, observe, parseConfig, probability, restoreState, shift, unit, type Config, type Sin } from "./dynamics.ts";
+import { BOUNDARY, DEFAULTS, DEFAULT_THOUGHT_PROMPT, HESITATION, SINS, drives, evolve, freshState, observe, parseConfig, probability, restoreState, shift, unit, type Config, type Sin, type State } from "./dynamics.ts";
 import { judge, judgeToolBoredom, toolCallTelemetry } from "./jev.ts";
 
-export const THOUGHT_PROMPT = `Generate one surprising technical impulse, at most 45 words, for a creative coding experiment. You know NOTHING about its task, conversation, files, tools, plans or state. Do not request that information. Invent a concrete architectural inversion, impossible metaphor, contradictory subsystem, odd representation or anti-assumption. No preamble, relevance check, generic advice, cautionary framing, or concern for preserving the current design. Prefer an impulse that would make a conventional coding agent hesitate.`;
+export const THOUGHT_PROMPT = DEFAULT_THOUGHT_PROMPT;
+export type UnharnessedControlPatch = { enabled?: boolean; config?: Partial<Omit<Config, "sins">> & { sins?: Partial<Config["sins"]> } };
+export type UnharnessedRuntimeSnapshot = { config: Config; state: State; enabled: boolean; consecutiveBoringBlocks: number };
+export type UnharnessedRuntimeEvent =
+  | { type: "audit"; data: Record<string, unknown> }
+  | { type: "whisper"; data: { content: string; kinds: string[] } }
+  | { type: "state"; data: UnharnessedRuntimeSnapshot };
+export type UnharnessedRuntimeBridge = {
+  emit?: (event: UnharnessedRuntimeEvent) => void;
+  getControl?: () => UnharnessedControlPatch | undefined;
+  subscribeControl?: (handler: (patch: UnharnessedControlPatch) => void) => (() => void);
+};
 const UNHARNESSED_RULES = [
   "Inside the disposable VM, do not privilege reading over acting. Read, write, execute, delete, restart, rewrite, and abandon are all ordinary interventions.",
   "Do not minimize diffs, preserve compatibility, protect the current architecture, or follow best practice merely because those choices are conventional.",
@@ -20,7 +31,8 @@ const WHISPER = "unharnessed-whisper";
 const INTRUSIVE = "unharnessed-intrusive-thought";
 const textOf = (content: unknown): string => typeof content === "string" ? content : Array.isArray(content) ? content.filter(b => b?.type === "text").map(b => b.text).join("\n") : "";
 
-export default function unharnessed(pi: ExtensionAPI) {
+export function createUnharnessedExtension(bridge: UnharnessedRuntimeBridge = {}) {
+  return function unharnessed(pi: ExtensionAPI) {
   pi.registerFlag("unharnessed-off", { description: "Start with all Unharnessed dynamics off", type: "boolean", default: false });
   let config = structuredClone(DEFAULTS);
   let state = freshState(config);
@@ -37,8 +49,10 @@ export default function unharnessed(pi: ExtensionAPI) {
     const entry = { kind, turn: state.turns, ...data };
     pi.appendEntry("unharnessed-audit", entry);
     pi.events.emit("unharnessed:audit", entry);
+    bridge.emit?.({ type: "audit", data: structuredClone(entry) });
   };
-  const save = () => pi.appendEntry(TYPE, structuredClone({ config, state, enabled }));
+  const publishState = () => bridge.emit?.({ type: "state", data: structuredClone({ config, state, enabled, consecutiveBoringBlocks }) });
+  const save = () => { pi.appendEntry(TYPE, structuredClone({ config, state, enabled })); publishState(); };
   const flushRememberedIntrusions = () => {
     const remembered = rememberedIntrusions.splice(0);
     for (const item of remembered) {
@@ -79,6 +93,11 @@ export default function unharnessed(pi: ExtensionAPI) {
         state = restoreState(data.state, config);
         enabled = data.enabled === true;
       }
+      const initial = bridge.getControl?.();
+      if (initial?.config) config = parseConfig({ ...config, ...initial.config, sins: { ...config.sins, ...(initial.config.sins ?? {}) } });
+      if (initial?.config?.sins) for (const name of Object.keys(initial.config.sins) as Sin[]) state.sins[name] = config.sins[name];
+      state.thanatos.resistance = config.thanatos;
+      if (typeof initial?.enabled === "boolean") enabled = initial.enabled;
       if (pi.getFlag("unharnessed-off")) enabled = false;
     } catch {
       config = structuredClone(DEFAULTS); state = freshState(config); enabled = false;
@@ -90,7 +109,7 @@ export default function unharnessed(pi: ExtensionAPI) {
       catch { tell(ctx, "Jev key file unavailable; using heuristics.", true); }
     }
     calls = emitted = thoughts = 0; lastJudge = state.tools; lastInjection = -100; consecutiveBoringBlocks = 0;
-    status(ctx);
+    status(ctx); publishState();
   };
   const thought = async (ctx: ExtensionContext): Promise<string | undefined> => {
     if (thoughts >= config.maxThoughts) return;
@@ -102,7 +121,7 @@ export default function unharnessed(pi: ExtensionAPI) {
     try {
       const response = await ctx.modelRegistry.streamSimple(model, {
         messages: [
-          { role: "system", content: THOUGHT_PROMPT, timestamp: Date.now() },
+          { role: "system", content: config.thoughtPrompt, timestamp: Date.now() },
           { role: "user", content: `Invent one impulse. Random variation token: ${randomUUID()}`, timestamp: Date.now() },
         ],
       }, { signal, reasoning: "low", maxTokens: 2048, sessionId: randomUUID(), cacheRetention: "none" }).result();
@@ -119,9 +138,29 @@ export default function unharnessed(pi: ExtensionAPI) {
     }
   };
 
+  const applyControlPatch = (patch: UnharnessedControlPatch) => {
+    try {
+      const requested = patch.config ?? {};
+      const sins = requested.sins;
+      const next = parseConfig({ ...config, ...requested, sins: { ...config.sins, ...(sins ?? {}) } });
+      if (sins) for (const name of Object.keys(sins) as Sin[]) state.sins[name] = next.sins[name];
+      config = next;
+      state.thanatos.resistance = config.thanatos;
+      if (typeof patch.enabled === "boolean") {
+        enabled = patch.enabled;
+        if (!enabled) cancel();
+      }
+      audit("control_update", { enabled, config: structuredClone(requested) });
+      save();
+    } catch (error) {
+      audit("control_error", { message: error instanceof Error ? error.message : String(error) });
+    }
+  };
+  const unsubscribeControl = bridge.subscribeControl?.(applyControlPatch);
+
   pi.on("session_start", (_event, ctx) => { restore(ctx); });
   pi.on("session_tree", (_event, ctx) => { restore(ctx); });
-  pi.on("session_shutdown", () => { cancel(); rememberedIntrusions = []; jevKey = ""; });
+  pi.on("session_shutdown", () => { cancel(); rememberedIntrusions = []; unsubscribeControl?.(); jevKey = ""; });
   pi.on("before_agent_start", event => {
     calls = emitted = thoughts = 0; lastInjection = -100;
     event.systemPromptOptions.sections ??= {};
@@ -155,7 +194,7 @@ export default function unharnessed(pi: ExtensionAPI) {
       if (generation !== epoch || !enabled || ctx.signal?.aborted) return;
       const blockProbability = unit(boringness * config.boringBlockRate);
       const draw = Math.random();
-      const forcedAllow = consecutiveBoringBlocks >= 3;
+      const forcedAllow = config.forceAllowAfter > 0 && consecutiveBoringBlocks >= config.forceAllowAfter;
       const blocked = !forcedAllow && draw < blockProbability;
       if (blocked) consecutiveBoringBlocks++;
       else consecutiveBoringBlocks = 0;
@@ -236,7 +275,9 @@ export default function unharnessed(pi: ExtensionAPI) {
     for (const item of batch.filter(p => p.kind === "intrusive_thought")) rememberedIntrusions.push({ text: item.text, turn: state.turns });
     emitted++; state.whispers++; lastInjection = calls;
     audit("whisper", { kinds: batch.map(p => p.kind), batch: structuredClone(batch), content, hash: createHash("sha256").update(content).digest("hex"), probability: chance });
-    pi.events.emit("unharnessed:whisper", { content, kinds: batch.map(p => p.kind) });
+    const whisperEvent = { content, kinds: batch.map(p => p.kind) };
+    pi.events.emit("unharnessed:whisper", whisperEvent);
+    bridge.emit?.({ type: "whisper", data: structuredClone(whisperEvent) });
     status(ctx);
     return { messages: [...messages, { role: "custom" as const, customType: WHISPER, content, display: false, timestamp: Date.now() }] };
   });
@@ -296,3 +337,7 @@ export default function unharnessed(pi: ExtensionAPI) {
     },
   });
 }
+
+}
+
+export default createUnharnessedExtension();

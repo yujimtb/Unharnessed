@@ -8,3 +8,8 @@ secrets/
 .local/
 artifacts/
 *.tgz
+control-plane/dist/
+control-plane/node_modules.interrupted/
+control-plane/.npm-*.log
+control-plane/.server-test*
+control-plane/.smoke*

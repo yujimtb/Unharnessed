@@ -12,7 +12,10 @@
   "scripts": {
     "check": "tsc --noEmit",
     "test": "node --test test/*.test.ts",
-    "test:live": "node scripts/compare.ts"
+    "test:live": "node scripts/compare.ts",
+    "control:dev": "npm --prefix control-plane run dev",
+    "control:check": "npm --prefix control-plane run check",
+    "control:build": "npm --prefix control-plane run build"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
